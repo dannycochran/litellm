@@ -501,7 +501,11 @@ ANTHROPIC_WEB_SEARCH_TOOL_MAX_USES = {
 }
 
 # LiteLLM standard web search tool name
-# Used for web search interception across providers
+# Used for web search interception across providers.
+# Intentionally distinct from client-side tool names ("WebSearch") so that
+# clients with their own WebSearch tool (e.g. Claude Desktop) aren't hijacked
+# on the main request — interception should only fire on the standalone
+# `web_search_20250305` server-tool sub-request.
 LITELLM_WEB_SEARCH_TOOL_NAME = "litellm_web_search"
 
 DEFAULT_IMAGE_ENDPOINT_MODEL = "dall-e-2"

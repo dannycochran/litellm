@@ -100,11 +100,11 @@ class WebSearchTransformation:
                 block_id = getattr(block, "id", None)
                 block_input = getattr(block, "input", {})
 
-            # Check for LiteLLM standard or legacy web search tools
-            # Handles: litellm_web_search, WebSearch, web_search
+            # Check for LiteLLM-converted web search tool. Intentionally do NOT
+            # match bare "WebSearch" — that's a client-side builtin tool_use
+            # that should pass through to the client unchanged.
             if block_type == "tool_use" and block_name in (
                 LITELLM_WEB_SEARCH_TOOL_NAME,
-                "WebSearch",
                 "web_search",
             ):
                 # Convert to dict for easier handling
@@ -195,6 +195,7 @@ class WebSearchTransformation:
                 LITELLM_WEB_SEARCH_TOOL_NAME,
                 "WebSearch",
                 "web_search",
+                "litellm_web_search",
             ):
                 # Parse arguments (might be JSON string)
                 if isinstance(function_arguments, str):
