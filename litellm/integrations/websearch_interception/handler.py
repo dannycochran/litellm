@@ -30,7 +30,11 @@ from litellm.types.integrations.websearch_interception import (
 )
 from litellm.types.llms.openai import AllMessageValues
 from litellm.types.utils import LlmProviders
-from litellm.utils import ProviderConfigManager
+
+# Providers that natively support the `web_search_20250305` server tool.
+# Bedrock is intentionally absent — it speaks Anthropic Messages but rejects
+# the web_search tool type (no native support).
+NATIVE_WEB_SEARCH_PROVIDERS = frozenset({"anthropic", "vertex_ai", "azure_ai"})
 
 
 class WebSearchInterceptionLogger(CustomLogger):
@@ -87,9 +91,10 @@ class WebSearchInterceptionLogger(CustomLogger):
         response in native Anthropic format (server_tool_use +
         web_search_tool_result) so Claude Code's WebSearchTool parser works.
 
-        Providers with native Anthropic Messages support (anthropic, bedrock,
+        Providers that natively support `web_search_20250305` (anthropic,
         vertex_ai, azure_ai) are skipped — their API handles web search
-        natively and returns the correct format already.
+        server-side and returns the correct format already. Bedrock is NOT
+        in this set: it speaks Anthropic Messages but rejects the tool type.
 
         Args:
             model: Model name from the request
@@ -112,24 +117,17 @@ class WebSearchInterceptionLogger(CustomLogger):
         ):
             return None
 
-        # Skip providers with native Anthropic Messages support — their API
-        # handles web_search_20250305 natively, returning server_tool_use +
-        # web_search_tool_result in the correct format already.
-        try:
-            provider_enum = LlmProviders(provider_str)
-            anthropic_config = (
-                ProviderConfigManager.get_provider_anthropic_messages_config(
-                    model=model, provider=provider_enum
-                )
+        # Skip providers that natively support the `web_search_20250305` server
+        # tool — their API returns server_tool_use + web_search_tool_result in
+        # the correct format already. Having a BaseAnthropicMessagesConfig is
+        # NOT sufficient: Bedrock speaks Anthropic Messages but rejects the
+        # web_search tool type, so it must fall through to short-circuit here.
+        if provider_str in NATIVE_WEB_SEARCH_PROVIDERS:
+            verbose_logger.debug(
+                f"WebSearchInterception: Skipping short-circuit for {provider_str} "
+                "(provider supports web_search server tool natively)"
             )
-            if anthropic_config is not None:
-                verbose_logger.debug(
-                    f"WebSearchInterception: Skipping short-circuit for {provider_str} "
-                    "(provider has native web search support)"
-                )
-                return None
-        except (ValueError, Exception):
-            pass  # unknown provider enum → safe to short-circuit
+            return None
 
         # All tools must be web search tools
         if not all(is_web_search_tool(t) for t in tools):
@@ -901,7 +899,9 @@ class WebSearchInterceptionLogger(CustomLogger):
             verbose_logger.debug(
                 f"WebSearchInterception: Executing search for '{query}' using provider '{search_provider}'"
             )
-            result = await litellm.asearch(query=query, search_provider=search_provider, api_base=api_base)
+            result = await litellm.asearch(
+                query=query, search_provider=search_provider, api_base=api_base
+            )
 
             # Format using transformation function
             search_result_text = WebSearchTransformation.format_search_response(result)

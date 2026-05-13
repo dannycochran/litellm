@@ -211,9 +211,9 @@ class TestTryShortCircuitSearch:
 
     @pytest.mark.asyncio
     async def test_does_not_short_circuit_native_providers(self):
-        """Providers with native Anthropic Messages support (anthropic, bedrock,
-        vertex_ai) are skipped — their API handles web search natively."""
-        for provider in ["anthropic", "bedrock"]:
+        """Providers that natively support `web_search_20250305` (anthropic,
+        vertex_ai, azure_ai) are skipped — their API handles it server-side."""
+        for provider in ["anthropic", "vertex_ai", "azure_ai"]:
             logger = WebSearchInterceptionLogger(
                 enabled_providers=[provider, "github_copilot"]
             )
@@ -225,7 +225,31 @@ class TestTryShortCircuitSearch:
                 custom_llm_provider=provider,
             )
 
-            assert result is None, f"Short-circuit should NOT fire for native provider {provider}"
+            assert (
+                result is None
+            ), f"Short-circuit should NOT fire for native provider {provider}"
+
+    @pytest.mark.asyncio
+    async def test_short_circuits_bedrock(self):
+        """Bedrock speaks Anthropic Messages but does NOT support
+        `web_search_20250305` natively — short-circuit must fire."""
+        logger = WebSearchInterceptionLogger(enabled_providers=["bedrock"])
+
+        with patch.object(
+            logger, "_execute_search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = "Title: R\nURL: https://x.com\nSnippet: s"
+
+            result = await logger.try_short_circuit_search(
+                model="bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                messages=[{"role": "user", "content": "search query"}],
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                custom_llm_provider="bedrock",
+            )
+
+        assert result is not None
+        assert result["content"][0]["type"] == "server_tool_use"
+        mock_search.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_short_circuits_non_native_providers(self):
