@@ -196,8 +196,8 @@ def is_web_search_tool(tool: Dict[str, Any]) -> bool:
     if tool_name == "web_search" and tool_type:
         return True
 
-    # Check for legacy WebSearch format
-    if tool_name == "WebSearch":
-        return True
-
+    # Intentionally do NOT match bare `name == "WebSearch"` — that's a
+    # client-side builtin (e.g. Claude Desktop) that should be left alone so
+    # the client's own tool handler runs and makes the standalone
+    # `web_search_20250305` sub-request.
     return False
